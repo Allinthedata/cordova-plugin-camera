@@ -19,8 +19,11 @@
 package org.apache.cordova.camera;
 
 import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 import android.media.ExifInterface;
+import android.location.Location;
 
 public class ExifHelper {
     private String aperture = null;
@@ -177,6 +180,57 @@ public class ExifHelper {
         } else {
             return 0;
         }
+    }
+    
+    public boolean setGPS(Location location) {
+        try {
+            double latitude = location.getLatitude();
+            double longitude = location.getLongitude();
+            
+            this.gpsLatitude = convertCoordinate(latitude);
+            this.gpsLatitudeRef = latitudeRef(latitude);
+            this.gpsLongitude = convertCoordinate(longitude);
+            this.gpsLongitudeRef = longitudeRef(longitude);
+            
+            SimpleDateFormat fmt = new SimpleDateFormat("yyyy:MM:dd HH:mm:ss");
+            this.gpsDateStamp = fmt.format(new Date(location.getTime()));
+            return true;
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return false;
+        }
+    }
+    
+    public boolean hasGPS() {
+        return this.gpsLatitude != null && this.gpsLongitude != null;
+    }
+    
+    private String convertCoordinate(double coord) {
+        StringBuilder sb = new StringBuilder(20);
+        coord = Math.abs(coord);
+        final int degree = (int)coord;
+        coord *= 60;
+        coord -= degree * 60.0d;
+        final int minute = (int)coord;
+        coord *= 60;
+        coord -= minute * 60.0d;
+        final int second = (int)(coord * 1000.0d);
+        sb.setLength(0);
+        sb.append(degree);
+        sb.append("/1,");
+        sb.append(minute);
+        sb.append("/1,");
+        sb.append(second);
+        sb.append("/1000,");
+        return sb.toString();
+    }
+    
+    public static String latitudeRef(final double latitude) {
+        return latitude < 0.0d ? "S" : "N";
+    }
+    
+    public static String longitudeRef(final double longitude) {
+        return longitude < 0.0d ? "W" : "E";
     }
 
     public void resetOrientation() {

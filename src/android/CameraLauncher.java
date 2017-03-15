@@ -65,6 +65,7 @@ import android.support.v4.content.FileProvider;
 import android.util.Base64;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.location.Location;
 
 /**
  * This class launches the camera view, allows the user to take a picture, closes the camera view,
@@ -118,11 +119,12 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
     public CallbackContext callbackContext;
     private int numPics;
 
-    private MediaScannerConnection conn;    // Used to update gallery app with newly-written files
-    private Uri scanMe;                     // Uri of image to be added to content store
+    private MediaScannerConnection conn;      // Used to update gallery app with newly-written files
+    private Uri scanMe;                       // Uri of image to be added to content store
     private Uri croppedUri;
-    private ExifHelper exifData;            // Exif data from source
+    private ExifHelper exifData;              // Exif data from source
     private String applicationId;
+    private LocationManager mLocationManager; // Used to capture GPS locations
 
 
     /**
@@ -289,6 +291,9 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
 
         // Let's use the intent and see what happens
         Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        
+        mLocationManager = new LocationManager(cordova.getActivity());
+        mLocationManager.recordLocation(true);
 
         // Specify file so that large image is captured and returned
         File photo = createCaptureFile(encodingType);
@@ -474,11 +479,21 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
                 this.imageUri.getFilePath();
 
 
+        Location mLocation = mLocationManager.getCurrentLocation();
+        boolean setGPSFromLocation = false;
+        
+        mLocationManager.recordLocation(false);
+        
         if (this.encodingType == JPEG) {
             try {
                 //We don't support PNG, so let's not pretend we do
                 exif.createInFile(sourcePath);
                 exif.readExifData();
+                
+                if (!exif.hasGPS() && mLocation != null) {
+                    setGPSFromLocation = exif.setGPS(mLocation);
+                }
+                
                 rotate = exif.getOrientation();
 
             } catch (IOException e) {
@@ -501,6 +516,12 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
                 Uri imageUri = this.imageUri.getFileUri();
                 writeUncompressedImage(imageUri, galleryUri);
             }
+            
+            if (this.encodingType == JPEG && setGPSFromLocation) {
+                // Write the new GPS into the file
+                exif.createOutFile(galleryUri.getPath());
+                exif.writeExifData();
+            }
 
             refreshGallery(galleryUri);
         }
@@ -520,7 +541,6 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
                 this.failPicture("Unable to create bitmap!");
                 return;
             }
-
 
             this.processPicture(bitmap, this.encodingType);
 
@@ -548,6 +568,12 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
                     } else {
                         Uri imageUri = this.imageUri.getFileUri();
                         writeUncompressedImage(imageUri, uri);
+                    }
+                    
+                    if (this.encodingType == JPEG && setGPSFromLocation) {
+                        // Write the new GPS into the file
+                        exif.createOutFile(uri.getPath());
+                        exif.writeExifData();
                     }
 
                     this.callbackContext.success(uri.toString());
